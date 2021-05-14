@@ -18,6 +18,8 @@ package providers
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -45,4 +47,45 @@ func TestNewGraphiteProvider_InvalidURL(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Equal(t, err.Error(), fmt.Sprintf("graphite address %s is not a valid URL", addr))
+}
+
+func TestGraphiteProvider_IsOnline(t *testing.T) {
+	tests := []struct {
+		name                 string
+		expectedResult       bool
+		graphiteResponseCode int
+		graphiteResponseBody string
+	}{{
+		"graphite responds 200 with valid JSON",
+		true,
+		200,
+		"[]",
+	}}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Println(r.URL.Path)
+				fmt.Println(r.URL.Query().Encode())
+				if r.URL.Path != "/render" || "format=json" != r.URL.Query().Encode() {
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+
+				w.WriteHeader(test.graphiteResponseCode)
+				fmt.Fprintf(w, test.graphiteResponseBody)
+			}))
+			defer ts.Close()
+
+			graph, err := NewGraphiteProvider(flaggerv1.MetricTemplateProvider{
+				Address: ts.URL,
+			})
+			require.NoError(t, err)
+
+			res, err := graph.IsOnline()
+
+			require.NoError(t, err)
+			assert.Equal(t, res, test.expectedResult)
+		})
+	}
 }
