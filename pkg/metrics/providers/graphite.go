@@ -30,8 +30,6 @@ import (
 	flaggerv1 "github.com/fluxcd/flagger/pkg/apis/flagger/v1beta1"
 )
 
-const graphiteOnlineQuery = "statsd.*"
-
 type graphiteMetric struct {
 	Leaf          int         `json:"leaf"`
 	Context       interface{} `json:"context"`
@@ -68,7 +66,7 @@ func NewGraphiteProvider(provider flaggerv1.MetricTemplateProvider) (*GraphitePr
 // RunQuery executes the Graphite query and returns the the response.
 func (g *GraphiteProvider) RunQuery(query string) (graphiteResponse, error) {
 	query = url.QueryEscape(g.trimQuery(query))
-	u, err := url.Parse(fmt.Sprintf("./metrics/find?query=%s", query))
+	u, err := url.Parse(fmt.Sprintf("./render?format=json&%s", query))
 	if err != nil {
 		return nil, fmt.Errorf("url.Parase failed: %w", err)
 	}
@@ -111,7 +109,7 @@ func (g *GraphiteProvider) RunQuery(query string) (graphiteResponse, error) {
 // IsOnline runs a simple Graphite query and returns an error if the
 // API is unreachable.
 func (g *GraphiteProvider) IsOnline() (bool, error) {
-	_, err := g.RunQuery(graphiteOnlineQuery)
+	_, err := g.RunQuery("")
 	if err != nil {
 		return false, fmt.Errorf("running query failed: %w", err)
 	}
