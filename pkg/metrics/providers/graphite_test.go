@@ -79,7 +79,8 @@ func TestGraphiteProvider_IsOnline(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path != "/render" || "format=json" != r.URL.Query().Encode() {
+				fmt.Println(r.URL.Query().Encode())
+				if r.URL.Path != "/render" || r.URL.Query().Encode() != "format=json&target=test" {
 					w.WriteHeader(http.StatusNotFound)
 					return
 				}

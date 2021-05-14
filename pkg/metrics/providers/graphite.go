@@ -64,9 +64,10 @@ func NewGraphiteProvider(provider flaggerv1.MetricTemplateProvider) (*GraphitePr
 }
 
 // RunQuery executes the Graphite query and returns the the response.
+// TODO: this will need to conform to the provider interface and return a (float, error).
 func (g *GraphiteProvider) RunQuery(query string) (graphiteResponse, error) {
-	query = url.QueryEscape(g.trimQuery(query))
-	u, err := url.Parse(fmt.Sprintf("./render?format=json&%s", query))
+	query = g.trimQuery(query + "&format=json")
+	u, err := url.Parse(fmt.Sprintf("./render?%s", query))
 	if err != nil {
 		return nil, fmt.Errorf("url.Parase failed: %w", err)
 	}
@@ -109,7 +110,7 @@ func (g *GraphiteProvider) RunQuery(query string) (graphiteResponse, error) {
 // IsOnline runs a simple Graphite query and returns an error if the
 // API is unreachable.
 func (g *GraphiteProvider) IsOnline() (bool, error) {
-	_, err := g.RunQuery("")
+	_, err := g.RunQuery("target=test")
 	if err != nil {
 		return false, fmt.Errorf("running query failed: %w", err)
 	}
