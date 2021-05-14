@@ -69,6 +69,12 @@ func TestGraphiteProvider_IsOnline(t *testing.T) {
 		200,
 		"[",
 	}, {
+		"Graphite responds 400",
+		false,
+		true,
+		400,
+		"error",
+	}, {
 		"Graphite responds 500",
 		false,
 		true,
