@@ -68,13 +68,17 @@ func TestGraphiteProvider_IsOnline(t *testing.T) {
 		true,
 		200,
 		"[",
+	}, {
+		"Graphite responds 500",
+		false,
+		true,
+		500,
+		"error",
 	}}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				fmt.Println(r.URL.Path)
-				fmt.Println(r.URL.Query().Encode())
 				if r.URL.Path != "/render" || "format=json" != r.URL.Query().Encode() {
 					w.WriteHeader(http.StatusNotFound)
 					return
