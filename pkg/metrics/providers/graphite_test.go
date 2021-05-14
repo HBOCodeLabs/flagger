@@ -51,15 +51,23 @@ func TestNewGraphiteProvider_InvalidURL(t *testing.T) {
 
 func TestGraphiteProvider_IsOnline(t *testing.T) {
 	tests := []struct {
-		name                 string
-		expectedResult       bool
-		graphiteResponseCode int
-		graphiteResponseBody string
+		name           string
+		expectedResult bool
+		errExpected    bool
+		code           int
+		body           string
 	}{{
-		"graphite responds 200 with valid JSON",
+		"Graphite responds 200 with valid JSON",
 		true,
+		false,
 		200,
 		"[]",
+	}, {
+		"Graphite responds 200 with invalid JSON",
+		false,
+		true,
+		200,
+		"[",
 	}}
 
 	for _, test := range tests {
@@ -72,8 +80,8 @@ func TestGraphiteProvider_IsOnline(t *testing.T) {
 					return
 				}
 
-				w.WriteHeader(test.graphiteResponseCode)
-				fmt.Fprintf(w, test.graphiteResponseBody)
+				w.WriteHeader(test.code)
+				fmt.Fprintf(w, test.body)
 			}))
 			defer ts.Close()
 
@@ -83,9 +91,13 @@ func TestGraphiteProvider_IsOnline(t *testing.T) {
 			require.NoError(t, err)
 
 			res, err := graph.IsOnline()
-
-			require.NoError(t, err)
 			assert.Equal(t, res, test.expectedResult)
+
+			if test.errExpected {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
 		})
 	}
 }
