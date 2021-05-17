@@ -43,13 +43,17 @@ type graphiteResponse []graphiteMetric
 
 // GraphiteProvider executes Graphite queries.
 type GraphiteProvider struct {
-	url     url.URL
-	timeout time.Duration
+	url      url.URL
+	username string
+	password string
+	timeout  time.Duration
 }
 
-// NewGraphiteProvider takes a provider spec and returns a Graphite
-// client ready to execute queries against the API.
-func NewGraphiteProvider(provider flaggerv1.MetricTemplateProvider) (*GraphiteProvider, error) {
+// NewGraphiteProvider takes a provider spec and credentials map,
+// validates the address, extracts the  credentials map's username
+// and password values if provided, and returns a Graphite client
+// ready to execute queries against the API.
+func NewGraphiteProvider(provider flaggerv1.MetricTemplateProvider, credentials map[string][]byte) (*GraphiteProvider, error) {
 	graphiteURL, err := url.Parse(provider.Address)
 	if provider.Address == "" || err != nil {
 		return nil, fmt.Errorf("%s address %s is not a valid URL", provider.Type, provider.Address)
@@ -58,6 +62,22 @@ func NewGraphiteProvider(provider flaggerv1.MetricTemplateProvider) (*GraphitePr
 	graph := GraphiteProvider{
 		url:     *graphiteURL,
 		timeout: 5 * time.Second,
+	}
+
+	if provider.SecretRef == nil {
+		return &graph, nil
+	}
+
+	if username, ok := credentials["username"]; ok {
+		graph.username = string(username)
+	} else {
+		return nil, fmt.Errorf("%s credentials does not contain a username", provider.Type)
+	}
+
+	if password, ok := credentials["password"]; ok {
+		graph.password = string(password)
+	} else {
+		return nil, fmt.Errorf("%s credentials does not contain a password", provider.Type)
 	}
 
 	return &graph, nil
@@ -78,6 +98,10 @@ func (g *GraphiteProvider) RunQuery(query string) (graphiteResponse, error) {
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("http.NewRequest failed: %w", err)
+	}
+
+	if g.username != "" && g.password != "" {
+		req.SetBasicAuth(g.username, g.password)
 	}
 
 	ctx, cancel := context.WithTimeout(req.Context(), g.timeout)
