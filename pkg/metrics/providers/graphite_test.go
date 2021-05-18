@@ -24,29 +24,104 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 
 	flaggerv1 "github.com/fluxcd/flagger/pkg/apis/flagger/v1beta1"
 )
 
 func TestNewGraphiteProvider(t *testing.T) {
-	addr := "http://graphite:8080"
-	graph, err := NewGraphiteProvider(flaggerv1.MetricTemplateProvider{
-		Address: addr,
-	})
+	secretRef := &corev1.LocalObjectReference{Name: "graphite"}
+	tests := []struct {
+		name           string
+		addr           string
+		secretRef      *corev1.LocalObjectReference
+		errExpected    bool
+		expectedErrStr string
+		credentials    map[string][]byte
+	}{{
+		name:           "a valid URL, a nil SecretRef, and an empty credentials map are specified",
+		addr:           "http://graphite:8080",
+		secretRef:      nil,
+		errExpected:    false,
+		expectedErrStr: "",
+		credentials:    map[string][]byte{},
+	}, {
+		name:           "an invalid URL is specified",
+		addr:           ":::",
+		secretRef:      nil,
+		errExpected:    true,
+		expectedErrStr: "graphite address ::: is not a valid URL",
+		credentials:    map[string][]byte{},
+	}, {
+		name:           "a valid URL, a SecretRef, and valid credentials are specified",
+		addr:           "http://graphite:8080",
+		secretRef:      secretRef,
+		errExpected:    false,
+		expectedErrStr: "",
+		credentials: map[string][]byte{
+			"username": []byte("a-username"),
+			"password": []byte("a-password"),
+		},
+	}, {
+		name:           "a valid URL, a SecretRef, and credentials without a username are specified",
+		addr:           "http://graphite:8080",
+		secretRef:      secretRef,
+		errExpected:    true,
+		expectedErrStr: "graphite credentials does not contain a username",
+		credentials: map[string][]byte{
+			"password": []byte("a-password"),
+		},
+	}, {
+		name:           "a valid URL, a SecretRef, and credentials without a password are specified",
+		addr:           "http://graphite:8080",
+		secretRef:      secretRef,
+		errExpected:    true,
+		expectedErrStr: "graphite credentials does not contain a password",
+		credentials: map[string][]byte{
+			"username": []byte("a-username"),
+		},
+	}, {
+		name:           "a valid URL, a nil SecretRef, and valid credentials are specified",
+		addr:           "http://graphite:8080",
+		secretRef:      nil,
+		errExpected:    false,
+		expectedErrStr: "",
+		credentials: map[string][]byte{
+			"username": []byte("a-username"),
+			"password": []byte("a-password"),
+		},
+	}}
 
-	require.NoError(t, err)
-	assert.Equal(t, addr, graph.url.String())
-}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			addr := test.addr
+			graph, err := NewGraphiteProvider(flaggerv1.MetricTemplateProvider{
+				Address:   addr,
+				Type:      "graphite",
+				SecretRef: test.secretRef,
+			}, test.credentials)
 
-func TestNewGraphiteProvider_InvalidURL(t *testing.T) {
-	addr := ":::"
-	_, err := NewGraphiteProvider(flaggerv1.MetricTemplateProvider{
-		Address: addr,
-		Type:    "graphite",
-	})
+			if test.errExpected {
+				require.Error(t, err)
+				assert.Equal(t, err.Error(), test.expectedErrStr)
+			} else {
+				username := ""
+				if uname, ok := test.credentials["username"]; ok && test.secretRef != nil {
+					username = string(uname)
+				}
 
-	require.Error(t, err)
-	assert.Equal(t, err.Error(), fmt.Sprintf("graphite address %s is not a valid URL", addr))
+				password := ""
+				if pword, ok := test.credentials["password"]; ok && test.secretRef != nil {
+					password = string(pword)
+				}
+
+				require.NoError(t, err)
+				assert.Equal(t, addr, graph.url.String())
+				assert.Equal(t, username, graph.username)
+				assert.Equal(t, password, graph.password)
+			}
+		})
+	}
 }
 
 func TestGraphiteProvider_IsOnline(t *testing.T) {
@@ -97,7 +172,7 @@ func TestGraphiteProvider_IsOnline(t *testing.T) {
 
 			graph, err := NewGraphiteProvider(flaggerv1.MetricTemplateProvider{
 				Address: ts.URL,
-			})
+			}, map[string][]byte{})
 			require.NoError(t, err)
 
 			res, err := graph.IsOnline()
