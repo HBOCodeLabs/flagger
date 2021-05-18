@@ -105,7 +105,7 @@ type GraphiteProvider struct {
 // NewGraphiteProvider takes a provider spec and credentials map,
 // validates the address, extracts the  credentials map's username
 // and password values if provided, and returns a Graphite client
-// ready to execute queries against the Graphie render URL API.
+// ready to execute queries against the Graphite render URL API.
 func NewGraphiteProvider(provider flaggerv1.MetricTemplateProvider, credentials map[string][]byte) (*GraphiteProvider, error) {
 	graphiteURL, err := url.Parse(provider.Address)
 	if provider.Address == "" || err != nil {
