@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"net/url"
 	"path"
@@ -46,6 +47,9 @@ func (gdp *graphiteDataPoint) UnmarshalJSON(data []byte) error {
 	switch v[0].(type) {
 	case nil:
 		// no value
+	case float64:
+		f, _ := v[0].(float64)
+		gdp.Value = &f
 	case string:
 		f, err := strconv.ParseFloat(v[0].(string), 64)
 		if err != nil {
@@ -60,11 +64,25 @@ func (gdp *graphiteDataPoint) UnmarshalJSON(data []byte) error {
 		gdp.Value = &f
 	}
 
-	t, ok := v[1].(int64)
-	if !ok {
-		return fmt.Errorf("error unmarshaling timestamp: %v", v[1])
+	switch v[1].(type) {
+	case nil:
+		// no value
+	case float64:
+		ts := int64(math.Round(v[1].(float64)))
+		gdp.TimeStamp = time.Unix(ts, 0)
+	case string:
+		ts, err := strconv.ParseInt(v[1].(string), 10, 64)
+		if err != nil {
+			return err
+		}
+		gdp.TimeStamp = time.Unix(ts, 0)
+	default:
+		ts, ok := v[1].(int64)
+		if !ok {
+			return fmt.Errorf("error unmarshaling timestamp: %v", v[0])
+		}
+		gdp.TimeStamp = time.Unix(ts, 0)
 	}
-	gdp.TimeStamp = time.Unix(t, 0)
 
 	return nil
 }
