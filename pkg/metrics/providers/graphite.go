@@ -44,6 +44,10 @@ func (gdp *graphiteDataPoint) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
+	if len(v) != 2 {
+		return fmt.Errorf("error unmarshaling data point: %v", v)
+	}
+
 	switch v[0].(type) {
 	case nil:
 		// no value
