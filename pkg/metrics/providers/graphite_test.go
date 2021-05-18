@@ -62,6 +62,34 @@ func TestNewGraphiteProvider(t *testing.T) {
 			"username": []byte("a-username"),
 			"password": []byte("a-password"),
 		},
+	}, {
+		name:           "a valid URL, a SecretRef, and credentials without a username are specified",
+		addr:           "http://graphite:8080",
+		secretRef:      secretRef,
+		errExpected:    true,
+		expectedErrStr: "graphite credentials does not contain a username",
+		credentials: map[string][]byte{
+			"password": []byte("a-password"),
+		},
+	}, {
+		name:           "a valid URL, a SecretRef, and credentials without a password are specified",
+		addr:           "http://graphite:8080",
+		secretRef:      secretRef,
+		errExpected:    true,
+		expectedErrStr: "graphite credentials does not contain a password",
+		credentials: map[string][]byte{
+			"username": []byte("a-username"),
+		},
+	}, {
+		name:           "a valid URL, a nil SecretRef, and valid credentials are specified",
+		addr:           "http://graphite:8080",
+		secretRef:      nil,
+		errExpected:    false,
+		expectedErrStr: "",
+		credentials: map[string][]byte{
+			"username": []byte("a-username"),
+			"password": []byte("a-password"),
+		},
 	}}
 
 	for _, test := range tests {
@@ -78,12 +106,12 @@ func TestNewGraphiteProvider(t *testing.T) {
 				assert.Equal(t, err.Error(), test.expectedErrStr)
 			} else {
 				username := ""
-				if uname, ok := test.credentials["username"]; ok {
+				if uname, ok := test.credentials["username"]; ok && test.secretRef != nil {
 					username = string(uname)
 				}
 
 				password := ""
-				if pword, ok := test.credentials["password"]; ok {
+				if pword, ok := test.credentials["password"]; ok && test.secretRef != nil {
 					password = string(pword)
 				}
 
