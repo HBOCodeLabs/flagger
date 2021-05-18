@@ -87,7 +87,7 @@ type GraphiteProvider struct {
 // NewGraphiteProvider takes a provider spec and credentials map,
 // validates the address, extracts the  credentials map's username
 // and password values if provided, and returns a Graphite client
-// ready to execute queries against the API.
+// ready to execute queries against the Graphie render URL API.
 func NewGraphiteProvider(provider flaggerv1.MetricTemplateProvider, credentials map[string][]byte) (*GraphiteProvider, error) {
 	graphiteURL, err := url.Parse(provider.Address)
 	if provider.Address == "" || err != nil {
@@ -186,7 +186,7 @@ func (g *GraphiteProvider) RunQuery(query string) (float64, error) {
 // an error if the API is unreachable.
 func (g *GraphiteProvider) IsOnline() (bool, error) {
 	_, err := g.RunQuery("target=test")
-	if err != ErrNoValuesFound {
+	if err != nil && err != ErrNoValuesFound {
 		return false, fmt.Errorf("running query failed: %w", err)
 	}
 
