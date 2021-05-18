@@ -25,23 +25,58 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"strconv"
 	"time"
 
 	flaggerv1 "github.com/fluxcd/flagger/pkg/apis/flagger/v1beta1"
 )
 
-type graphiteMetric struct {
-	Leaf          int         `json:"leaf"`
-	Context       interface{} `json:"context"`
-	Text          string      `json:"text"`
-	Expandable    int         `json:"expandable"`
-	ID            string      `json:"id"`
-	AllowChildren int         `json:"allowChildren"`
+type graphiteDataPoint struct {
+	Value     *float64
+	TimeStamp time.Time
 }
 
-type graphiteResponse []graphiteMetric
+func (gdp *graphiteDataPoint) UnmarshalJSON(data []byte) error {
 
-// GraphiteProvider executes Graphite queries.
+	var v []interface{}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+
+	switch v[0].(type) {
+	case nil:
+		// no value
+	case string:
+		f, err := strconv.ParseFloat(v[0].(string), 64)
+		if err != nil {
+			return err
+		}
+		gdp.Value = &f
+	default:
+		f, ok := v[0].(float64)
+		if !ok {
+			return fmt.Errorf("error unmarshaling value: %v", v[0])
+		}
+		gdp.Value = &f
+	}
+
+	t, ok := v[1].(int64)
+	if !ok {
+		return fmt.Errorf("error unmarshaling timestamp: %v", v[1])
+	}
+	gdp.TimeStamp = time.Unix(t, 0)
+
+	return nil
+}
+
+type graphiteTargetResp struct {
+	Target     string              `json:"target"`
+	DataPoints []graphiteDataPoint `json:"datapoints"`
+}
+
+type graphiteResponse []graphiteTargetResp
+
+// GraphiteProvider executes Graphite render URL API queries.
 type GraphiteProvider struct {
 	url      url.URL
 	username string
@@ -83,21 +118,25 @@ func NewGraphiteProvider(provider flaggerv1.MetricTemplateProvider, credentials 
 	return &graph, nil
 }
 
-// RunQuery executes the Graphite query and returns the the response.
-// TODO: this will need to conform to the provider interface and return a (float, error).
-func (g *GraphiteProvider) RunQuery(query string) (graphiteResponse, error) {
-	query = g.trimQuery(query + "&format=json")
+// RunQuery executes the Graphite render URL API query and returns the
+// the first result as float64.
+func (g *GraphiteProvider) RunQuery(query string) (float64, error) {
+	query = g.trimQuery(query)
 	u, err := url.Parse(fmt.Sprintf("./render?%s", query))
 	if err != nil {
-		return nil, fmt.Errorf("url.Parase failed: %w", err)
+		return 0, fmt.Errorf("url.Parase failed: %w", err)
 	}
+
+	q := u.Query()
+	q.Set("format", "json")
+	u.RawQuery = q.Encode()
 
 	u.Path = path.Join(g.url.Path, u.Path)
 	u = g.url.ResolveReference(u)
 
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("http.NewRequest failed: %w", err)
+		return 0, fmt.Errorf("http.NewRequest failed: %w", err)
 	}
 
 	if g.username != "" && g.password != "" {
@@ -109,33 +148,45 @@ func (g *GraphiteProvider) RunQuery(query string) (graphiteResponse, error) {
 
 	r, err := http.DefaultClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return 0, fmt.Errorf("request failed: %w", err)
 	}
 	defer r.Body.Close()
 
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		return nil, fmt.Errorf("error reading body: %w", err)
+		return 0, fmt.Errorf("error reading body: %w", err)
 	}
 
 	if 400 <= r.StatusCode {
-		return nil, fmt.Errorf("error response: %s", string(b))
+		return 0, fmt.Errorf("error response: %s", string(b))
 	}
 
 	var result graphiteResponse
 	err = json.Unmarshal(b, &result)
 	if err != nil {
-		return nil, fmt.Errorf("error unmarshaling result: %w, '%s'", err, string(b))
+		return 0, fmt.Errorf("error unmarshaling result: %w, '%s'", err, string(b))
 	}
 
-	return result, nil
+	var value *float64
+	for _, tr := range result {
+		for _, dp := range tr.DataPoints {
+			if dp.Value != nil {
+				value = dp.Value
+			}
+		}
+	}
+	if value == nil {
+		return 0, ErrNoValuesFound
+	}
+
+	return *value, nil
 }
 
-// IsOnline runs a simple Graphite query and returns an error if the
-// API is unreachable.
+// IsOnline runs a simple Graphite render URL API query and returns
+// an error if the API is unreachable.
 func (g *GraphiteProvider) IsOnline() (bool, error) {
 	_, err := g.RunQuery("target=test")
-	if err != nil {
+	if err != ErrNoValuesFound {
 		return false, fmt.Errorf("running query failed: %w", err)
 	}
 
